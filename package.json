@@ -1,5 +1,5 @@
 {
-  "name": "nvidia-free-models",
+  "name": "vector",
   "version": "1.0.0",
   "description": "Access 5 frontier Chinese AI models for free via NVIDIA NIM",
   "type": "module",
@@ -12,6 +12,7 @@
     "test:all": "vitest run"
   },
   "dependencies": {
+    "fuzzysort": "^3.1.0",
     "openai": "^4.0.0",
     "zod": "^3.25.76"
   },
