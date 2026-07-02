@@ -9,6 +9,7 @@ import { getApprovalMode, setApprovalMode, type ApprovalMode } from "./approval.
 import { saveSession, loadSession, clearSession, addMessage, getSessionSize, type SessionMessage } from "./session.js"
 import { compactHistory } from "./compact.js"
 import { stripThinkingTags } from "./utils/strip-thinking.js"
+import { createCompleter } from "./completer.js"
 import { loadAgentsMd, formatSystemPromptWithAgentsMd } from "./agents-md.js"
 import { initAgentsMd } from "./init-agents-md.js"
 import { undoLastBatch, hasPendingUndo, getPendingBatchSize, clearPendingBatch } from "./undo.js"
@@ -228,11 +229,30 @@ async function handleCommand(input: string): Promise<boolean> {
       break
     }
     case "/init": {
-      const { content, path } = await initAgentsMd(workspaceRoot)
-      const { writeFileSync } = await import("fs")
-      writeFileSync(path, content, "utf-8")
-      console.log(`  Generated AGENTS.md at ${path}`)
-      console.log("  Sections: Project Type, Setup, Commands, Architecture, Key Conventions")
+      const { initAgentsMd: initMd, gatherProjectFacts } = await import("./init-agents-md.js")
+      const facts = await gatherProjectFacts(workspaceRoot)
+      console.log("  Detected:")
+      if (facts.project?.name) console.log(`    Name: ${facts.project.name}`)
+      if (facts.language) console.log(`    Language: ${facts.language}`)
+      if (facts.framework) console.log(`    Framework: ${facts.framework}`)
+      if (facts.testing?.framework) console.log(`    Testing: ${facts.testing.framework}`)
+      if (facts.tooling?.linter) console.log(`    Linter: ${facts.tooling.linter}`)
+
+      let client: any = undefined
+      let modelId: string | undefined
+      try {
+        const ref = currentModel ?? registry.getDefault()
+        const resolved = registry.resolve(ref)
+        const result = getClient(ref)
+        client = result.client
+        modelId = resolved.modelId
+      } catch {
+        // no model available, use static generation
+      }
+
+      const { content, path } = await initMd(workspaceRoot, client && modelId ? { client, modelId } : undefined)
+      console.log(`\n  Generated ${path}`)
+      console.log("  (edit freely — this is a starter template)")
       break
     }
     case "/model":
@@ -317,156 +337,163 @@ async function main() {
   const rl = readline.createInterface({
     input: process.stdin,
     output: process.stdout,
+    terminal: true,
     prompt: "You: ",
+    completer: createCompleter({
+      listProviders: () => registry.listProviders(),
+      listModels: (provider) => registry.listModels(provider),
+    }),
   })
 
-  const ask = () => {
-    rl.question("You: ", async (input) => {
-      if (!input.trim()) {
-        ask()
-        return
-      }
+  const processInput = async (input: string) => {
+    if (!input.trim()) {
+      rl.prompt()
+      return
+    }
 
-      if (await handleCommand(input)) {
-        ask()
-        return
-      }
+    if (await handleCommand(input)) {
+      rl.prompt()
+      return
+    }
 
-      messages = addMessage(messages, { role: "user", content: input })
+    messages = addMessage(messages, { role: "user", content: input })
 
-      try {
-        const { client, resolved } = getClient(currentModel)
-        const contextMessages = compactHistory(messages, resolved.config.contextWindow)
-        const useTools = resolved.config.supportsTools
-        const canStream = !useTools
+    try {
+      const { client, resolved } = getClient(currentModel)
+      const contextMessages = compactHistory(messages, resolved.config.contextWindow)
+      const useTools = resolved.config.supportsTools
+      const canStream = !useTools
 
-        let assistantContent = ""
-        const toolCalls: { id: string; name: string; arguments: string }[] = []
+      let assistantContent = ""
+      const toolCalls: { id: string; name: string; arguments: string }[] = []
 
-        if (canStream) {
-          const stream = await client.chat.completions.create({
-            model: resolved.modelId,
-            messages: contextMessages as any,
-            stream: true,
-          })
-          process.stdout.write("\nAssistant: ")
-          for await (const chunk of stream) {
-            const delta = chunk.choices[0]?.delta
-            if (delta?.content) {
-              process.stdout.write(delta.content)
-              assistantContent += delta.content
-            }
+      if (canStream) {
+        const stream = await client.chat.completions.create({
+          model: resolved.modelId,
+          messages: contextMessages as any,
+          stream: true,
+        })
+        process.stdout.write("\nAssistant: ")
+        for await (const chunk of stream) {
+          const delta = chunk.choices[0]?.delta
+          if (delta?.content) {
+            process.stdout.write(delta.content)
+            assistantContent += delta.content
           }
-          console.log("\n")
-        } else {
-          const response = await client.chat.completions.create({
-            model: resolved.modelId,
-            messages: contextMessages as any,
-            tools: TOOL_SCHEMAS,
-            tool_choice: "auto",
-          })
-          const choice = response.choices[0]
-          if (!choice) {
-            console.log("\n  (No response from model. Try rephrasing your message.)\n")
-            messages = addMessage(messages, { role: "assistant", content: "(No response)" })
-            persistSession()
-            ask()
-            return
-          }
-          assistantContent = choice.message?.content ?? ""
-          const rawToolCalls = choice.message?.tool_calls ?? []
-          for (const tc of rawToolCalls) {
-            toolCalls.push({ id: tc.id, name: tc.function.name, arguments: tc.function.arguments })
-          }
-          if (assistantContent) {
-            const displayContent = reasoningEnabled ? assistantContent : stripThinkingTags(assistantContent)
-            process.stdout.write(`\nAssistant: ${displayContent}\n\n`)
-          }
-          recordUsage((response as ChatCompletion).usage)
         }
-
+        console.log("\n")
+      } else {
+        const response = await client.chat.completions.create({
+          model: resolved.modelId,
+          messages: contextMessages as any,
+          tools: TOOL_SCHEMAS,
+          tool_choice: "auto",
+        })
+        const choice = response.choices[0]
+        if (!choice) {
+          console.log("\n  (No response from model. Try rephrasing your message.)\n")
+          messages = addMessage(messages, { role: "assistant", content: "(No response)" })
+          persistSession()
+          rl.prompt()
+          return
+        }
+        assistantContent = choice.message?.content ?? ""
+        const rawToolCalls = choice.message?.tool_calls ?? []
+        for (const tc of rawToolCalls) {
+          toolCalls.push({ id: tc.id, name: tc.function.name, arguments: tc.function.arguments })
+        }
         if (assistantContent) {
-          messages = addMessage(messages, { role: "assistant", content: assistantContent })
+          const displayContent = reasoningEnabled ? assistantContent : stripThinkingTags(assistantContent)
+          process.stdout.write(`\nAssistant: ${displayContent}\n\n`)
         }
-
-        if (toolCalls.length > 0) {
-          for (const tc of toolCalls) {
-            let args: Record<string, unknown> = {}
-            try {
-              args = JSON.parse(tc.arguments)
-            } catch {
-              try {
-                args = JSON.parse(tc.arguments.replace(/'/g, '"'))
-              } catch {
-                const errOutput = `<tool_output name="${tc.name}" status="error">\nInvalid JSON arguments\n</tool_output>`
-                messages = addMessage(messages, { role: "tool", content: errOutput, tool_call_id: tc.id })
-                console.log(errOutput)
-                continue
-              }
-            }
-
-            console.log(`  [tool: ${tc.name}]`)
-            const output = await dispatchTool(tc.name, args)
-            console.log(output)
-            toolCallCount++
-            messages = addMessage(messages, { role: "tool", content: output, tool_call_id: tc.id })
-          }
-
-          const toolMessages = messages.filter((m) => m.role === "tool").slice(-toolCalls.length)
-          const followUp = await client.chat.completions.create({
-            model: resolved.modelId,
-            messages: [
-              ...contextMessages,
-              {
-                role: "assistant",
-                content: assistantContent,
-                tool_calls: toolCalls.map((tc) => ({
-                  id: tc.id,
-                  type: "function" as const,
-                  function: { name: tc.name, arguments: tc.arguments },
-                })),
-              },
-              ...toolMessages,
-            ] as any,
-          })
-
-          const followUpContent = followUp.choices[0].message.content ?? ""
-          if (followUpContent) {
-            const displayContent = reasoningEnabled ? followUpContent : stripThinkingTags(followUpContent)
-            process.stdout.write(`\nAssistant: ${displayContent}\n\n`)
-            messages = addMessage(messages, { role: "assistant", content: followUpContent })
-          }
-          recordUsage((followUp as ChatCompletion).usage)
-        }
-      } catch (e) {
-        const msg = (e as Error).message
-        if (msg.includes("401") || msg.includes("Unauthorized")) {
-          console.error("  Error: Missing or invalid API key. Check your .env file.")
-        } else if (msg.includes("404")) {
-          console.error(`  Error: Model not available. Current: ${currentModel ?? registry.getDefault()}`)
-          console.error("  Use /model to switch to a configured model.")
-          const available = registry.listModels("nvidia")
-          if (available.length > 0) {
-            console.log("  Available models:")
-            available.forEach((m) => console.log(`    nvidia/${m.id}`))
-          }
-        } else {
-          console.error(`  Error: ${msg}`)
-        }
-        console.log()
+        recordUsage((response as ChatCompletion).usage)
       }
 
-      persistSession()
-      ask()
-    })
+      if (assistantContent) {
+        messages = addMessage(messages, { role: "assistant", content: assistantContent })
+      }
+
+      if (toolCalls.length > 0) {
+        for (const tc of toolCalls) {
+          let args: Record<string, unknown> = {}
+          try {
+            args = JSON.parse(tc.arguments)
+          } catch {
+            try {
+              args = JSON.parse(tc.arguments.replace(/'/g, '"'))
+            } catch {
+              const errOutput = `<tool_output name="${tc.name}" status="error">\nInvalid JSON arguments\n</tool_output>`
+              messages = addMessage(messages, { role: "tool", content: errOutput, tool_call_id: tc.id })
+              console.log(errOutput)
+              continue
+            }
+          }
+
+          console.log(`  [tool: ${tc.name}]`)
+          const output = await dispatchTool(tc.name, args)
+          console.log(output)
+          toolCallCount++
+          messages = addMessage(messages, { role: "tool", content: output, tool_call_id: tc.id })
+        }
+
+        const toolMessages = messages.filter((m) => m.role === "tool").slice(-toolCalls.length)
+        const followUp = await client.chat.completions.create({
+          model: resolved.modelId,
+          messages: [
+            ...contextMessages,
+            {
+              role: "assistant",
+              content: assistantContent,
+              tool_calls: toolCalls.map((tc) => ({
+                id: tc.id,
+                type: "function" as const,
+                function: { name: tc.name, arguments: tc.arguments },
+              })),
+            },
+            ...toolMessages,
+          ] as any,
+        })
+
+        const followUpContent = followUp.choices[0].message.content ?? ""
+        if (followUpContent) {
+          const displayContent = reasoningEnabled ? followUpContent : stripThinkingTags(followUpContent)
+          process.stdout.write(`\nAssistant: ${displayContent}\n\n`)
+          messages = addMessage(messages, { role: "assistant", content: followUpContent })
+        }
+        recordUsage((followUp as ChatCompletion).usage)
+      }
+    } catch (e) {
+      const msg = (e as Error).message
+      if (msg.includes("401") || msg.includes("Unauthorized")) {
+        console.error("  Error: Missing or invalid API key. Check your .env file.")
+      } else if (msg.includes("404")) {
+        console.error(`  Error: Model not available. Current: ${currentModel ?? registry.getDefault()}`)
+        console.error("  Use /model to switch to a configured model.")
+        const available = registry.listModels("nvidia")
+        if (available.length > 0) {
+          console.log("  Available models:")
+          available.forEach((m) => console.log(`    nvidia/${m.id}`))
+        }
+      } else {
+        console.error(`  Error: ${msg}`)
+      }
+      console.log()
+    }
+
+    persistSession()
+    rl.prompt()
   }
+
+  rl.on("line", (input) => {
+    processInput(input)
+  })
 
   rl.on("SIGINT", () => {
     console.log("\n  (Ctrl+C) Use /exit to quit.")
-    ask()
+    rl.prompt()
   })
 
-  ask()
+  rl.prompt()
 }
 
 main()
