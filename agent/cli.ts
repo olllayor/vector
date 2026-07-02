@@ -207,6 +207,9 @@ async function main() {
     },
     exitSession: () => {
       persistSession()
+      if (process.stdin.isTTY && process.stdin.setRawMode) {
+        process.stdin.setRawMode(false)
+      }
       console.log("  Session saved. Bye!")
       process.exit(0)
     },
@@ -405,6 +408,13 @@ async function main() {
     process.stdin.setRawMode(true)
     process.stdin.resume()
     process.stdin.setEncoding("utf8")
+
+    const restoreRawMode = () => {
+      if (process.stdin.setRawMode) process.stdin.setRawMode(false)
+    }
+    process.on("exit", restoreRawMode)
+    process.on("SIGINT", restoreRawMode)
+    process.on("SIGTERM", restoreRawMode)
 
     let lineBuffer = ""
 
