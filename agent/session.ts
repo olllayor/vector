@@ -15,6 +15,13 @@ export interface Session {
   model: string
   approvalMode: ApprovalMode
   messages: SessionMessage[]
+  tokenUsage?: {
+    totalPromptTokens: number
+    totalCompletionTokens: number
+    totalTokens: number
+    latestPromptTokens: number
+    turnCount: number
+  }
   updatedAt: string
 }
 
