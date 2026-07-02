@@ -1,0 +1,57 @@
+{
+  "providers": {
+    "nvidia": {
+      "baseURL": "https://integrate.api.nvidia.com/v1",
+      "apiKeyEnv": "NVAPI_KEY",
+      "models": [
+        {
+          "id": "nvidia/nemotron-3-nano-30b-a3b",
+          "supportsTools": true,
+          "supportsParallelToolCalls": false,
+          "supportsStreamingToolDeltas": false,
+          "supportsReasoningTags": true,
+          "contextWindow": 1000000,
+          "fallback": "nvidia/minimaxai/minimax-m3"
+        },
+        {
+          "id": "minimaxai/minimax-m3",
+          "supportsTools": false,
+          "supportsParallelToolCalls": false,
+          "supportsStreamingToolDeltas": false,
+          "supportsReasoningTags": false,
+          "contextWindow": 128000,
+          "fallback": null
+        },
+        {
+          "id": "moonshotai/kimi-k2.6",
+          "supportsTools": true,
+          "supportsParallelToolCalls": false,
+          "supportsStreamingToolDeltas": false,
+          "supportsReasoningTags": false,
+          "contextWindow": 128000,
+          "fallback": null
+        },
+        {
+          "id": "deepseek-ai/deepseek-v4-flash",
+          "supportsTools": true,
+          "supportsParallelToolCalls": false,
+          "supportsStreamingToolDeltas": false,
+          "supportsReasoningTags": false,
+          "contextWindow": 1000000,
+          "fallback": null
+        }
+      ]
+    },
+    "openrouter": {
+      "baseURL": "https://openrouter.ai/api/v1",
+      "apiKeyEnv": "OPENROUTER_API_KEY",
+      "models": []
+    },
+    "ollama": {
+      "baseURL": "http://localhost:11434/v1",
+      "apiKeyEnv": null,
+      "models": []
+    }
+  },
+  "default": "nvidia/nvidia/nemotron-3-nano-30b-a3b"
+}
