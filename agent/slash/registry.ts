@@ -20,3 +20,13 @@ export class SlashRegistry {
     return [...this.commands.values()]
   }
 }
+
+import { createBuiltins, type BuiltinDeps } from "./builtins.js"
+
+export function loadBuiltins(deps: BuiltinDeps): SlashRegistry {
+  const registry = new SlashRegistry()
+  for (const cmd of createBuiltins(deps)) {
+    registry.register(cmd)
+  }
+  return registry
+}
