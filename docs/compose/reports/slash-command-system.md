@@ -4,8 +4,8 @@ status: delivered
 specs: []
 plans:
   - docs/compose/plans/2026-07-02-slash-command-system.md
-branch: dev
-commits: 54ca761..8eea7bd
+branch: main
+commits: 54ca761..d6d20b2
 ---
 
 # Slash Command System — Final Report
@@ -14,7 +14,7 @@ commits: 54ca761..8eea7bd
 
 A state-machine-driven slash command system for the vector CLI agent. The system replaces the old prefix-matching completer with a fuzzy-matching popup menu that appears when the user types `/` at the start of input. Commands are registered in a central registry, matched using fuzzysort, and executed via a dispatch function decoupled from the UI.
 
-The popup menu renders using ANSI escape codes in raw terminal mode, supports arrow key navigation, filtering as you type, and Enter to select. Escape dismisses the menu. The system is fully testable with 30 unit tests across 4 modules.
+The popup menu renders using ANSI escape codes in raw terminal mode, supports arrow key navigation, filtering as you type, and Enter to select. Escape dismisses the menu. Raw mode is safely restored on all exit paths (explicit `/exit`, Ctrl+C, SIGTERM). The system is fully testable with 30 unit tests across 4 modules.
 
 ## Architecture
 
@@ -48,6 +48,7 @@ agent/slash/
 - **No result cap at match level**: Avoided OpenCode's #17027 bug where capping before rendering made arrow nav wrap inside truncated set. Cap only at render time (maxVisible=8).
 - **Raw readline + ANSI over Ink**: Project uses Node readline, not Ink. Same state machine, just ANSI codes for popup instead of JSX.
 - **Dispatch decoupled from UI**: Works identically whether typed blind or picked from popup. Clean separation per Codex's pattern.
+- **Raw mode safety**: Terminal raw mode is restored on `exit`, `SIGINT`, and `SIGTERM` via process handlers, plus explicit cleanup in `exitSession`. Prevents broken terminal state on unexpected exits.
 
 ## Usage
 
@@ -84,6 +85,7 @@ Direct typing also works: `/model nvidia/deepseek` executes immediately without 
 
 - [lesson] vitest with `"moduleResolution": "bundler"` requires `.js` extensions in imports but resolves `.ts` files. Tests in subdirectories need correct relative paths (`../../agent/slash/registry.js`).
 - [pivot] Initial plan had Ink/JSX for popup. Adapted to raw readline + ANSI after discovering project uses Node readline, not Ink. Same state machine, different rendering.
+- [lesson] Raw mode must be restored on all exit paths. `process.exit()` doesn't trigger cleanup handlers by default — need explicit `setRawMode(false)` in exit handler plus `process.on('exit')` safety net.
 
 ## Source Materials
 
