@@ -9,7 +9,9 @@ import { getApprovalMode, setApprovalMode, type ApprovalMode } from "./approval.
 import { saveSession, loadSession, clearSession, addMessage, getSessionSize, type SessionMessage } from "./session.js"
 import { compactHistory } from "./compact.js"
 import { stripThinkingTags } from "./utils/strip-thinking.js"
-import { createCompleter } from "./completer.js"
+import { loadBuiltins } from "./slash/registry.js"
+import { dispatchSlashCommand } from "./slash/dispatch.js"
+import { SlashMenu } from "./slash/menu.js"
 import { loadAgentsMd, formatSystemPromptWithAgentsMd } from "./agents-md.js"
 import { initAgentsMd } from "./init-agents-md.js"
 import { undoLastBatch, hasPendingUndo, getPendingBatchSize, clearPendingBatch } from "./undo.js"
@@ -68,39 +70,7 @@ function persistSession(): void {
   })
 }
 
-function printHelp() {
-  console.log(`
-Commands:
-  /status               Show model, approvals, and token usage
-  /help                 Show this help
-  /init                 Generate AGENTS.md for this project
-  /model                Show current model
-  /model <provider/id>  Switch model
-  /providers            List all providers and models
-  /approval             Show current approval mode
-  /approval <mode>      Set approval mode (ask/auto/full)
-  /reasoning            Toggle reasoning (<think> tags)
-  /undo                 Undo last file edit batch
-  /diff                 Show git diff
-  /clear                Clear conversation history
-  /exit                 Exit vector
-`)
-}
 
-function printProviders() {
-  for (const p of registry.listProviders()) {
-    console.log(`\n  ${p}:`)
-    const models = registry.listModels(p)
-    if (models.length === 0) {
-      console.log("    (no models configured)")
-    } else {
-      for (const m of models) {
-        console.log(`    ${p}/${m.id}  [tools: ${m.supportsTools}, ctx: ${m.contextWindow}]`)
-      }
-    }
-  }
-  console.log()
-}
 
 async function dispatchTool(name: string, args: Record<string, unknown>): Promise<string> {
   switch (name) {
@@ -204,20 +174,16 @@ const TOOL_SCHEMAS = [
   },
 ]
 
-async function handleCommand(input: string): Promise<boolean> {
-  const trimmed = input.trim()
-  if (!trimmed.startsWith("/")) return false
 
-  const [cmd, ...args] = trimmed.split(/\s+/)
 
-  switch (cmd) {
-    case "/help":
-      printHelp()
-      break
-    case "/status": {
+async function main() {
+  await loadOrCreateSession()
+
+  const slashRegistry = loadBuiltins({
+    getStatus: () => {
       const ref = currentModel ?? registry.getDefault()
       const resolved = registry.resolve(ref)
-      const statusOutput = formatStatus(getStatus(), {
+      return formatStatus(getStatus(), {
         model: `${resolved.provider}/${resolved.modelId}`,
         approvalMode: getApprovalMode(),
         reasoningEnabled,
@@ -225,10 +191,33 @@ async function handleCommand(input: string): Promise<boolean> {
         messageCount: messages.length,
         toolCallCount,
       })
-      console.log(statusOutput)
-      break
-    }
-    case "/init": {
+    },
+    getCurrentModel: () => currentModel ?? registry.getDefault(),
+    listProviders: () => registry.listProviders(),
+    listModels: (p) => registry.listModels(p),
+    getApprovalMode: () => getApprovalMode(),
+    setApprovalMode: (m) => setApprovalMode(m as ApprovalMode),
+    reasoningEnabled: () => reasoningEnabled,
+    toggleReasoning: () => { reasoningEnabled = !reasoningEnabled },
+    undoLastBatch: () => undoLastBatch(workspaceRoot),
+    gitDiff: (args) => gitDiff(args, workspaceRoot),
+    clearSession: () => {
+      messages = [{ role: "system", content: formatSystemPromptWithAgentsMd(BASE_SYSTEM_PROMPT, "") }]
+      clearPendingBatch()
+    },
+    exitSession: () => {
+      persistSession()
+      console.log("  Session saved. Bye!")
+      process.exit(0)
+    },
+  })
+
+  // Add /init command after registry is created (needs dynamic import)
+  slashRegistry.register({
+    name: "init",
+    description: "Generate AGENTS.md for this project",
+    source: "builtin",
+    handler: async () => {
       const { initAgentsMd: initMd, gatherProjectFacts } = await import("./init-agents-md.js")
       const facts = await gatherProjectFacts(workspaceRoot)
       console.log("  Detected:")
@@ -253,96 +242,22 @@ async function handleCommand(input: string): Promise<boolean> {
       const { content, path } = await initMd(workspaceRoot, client && modelId ? { client, modelId } : undefined)
       console.log(`\n  Generated ${path}`)
       console.log("  (edit freely — this is a starter template)")
-      break
-    }
-    case "/model":
-      if (args.length === 0) {
-        console.log(`  Current model: ${currentModel ?? registry.getDefault()}`)
-      } else {
-        try {
-          const ref = args.join("/")
-          registry.resolve(ref)
-          currentModel = ref
-          console.log(`  Switched to: ${ref}`)
-        } catch (e) {
-          console.error(`  Error: ${(e as Error).message}`)
-        }
-      }
-      break
-    case "/providers":
-      printProviders()
-      break
-    case "/approval":
-      if (args.length === 0) {
-        console.log(`  Current mode: ${getApprovalMode()}`)
-        console.log("  Modes: ask (default), auto, full")
-      } else {
-        const mode = args[0] as ApprovalMode
-        if (["ask", "auto", "full"].includes(mode)) {
-          setApprovalMode(mode)
-          console.log(`  Approval mode: ${mode}`)
-        } else {
-          console.error("  Invalid mode. Use: ask, auto, or full")
-        }
-      }
-      break
-    case "/reasoning":
-      reasoningEnabled = !reasoningEnabled
-      console.log(`  Reasoning: ${reasoningEnabled ? "ON" : "OFF"}`)
-      break
-    case "/undo": {
-      const result = undoLastBatch(workspaceRoot)
-      if (result.restored.length > 0) {
-        console.log("  Undone:")
-        result.restored.forEach((r) => console.log(`    ${r}`))
-      }
-      if (result.errors.length > 0) {
-        result.errors.forEach((e) => console.error(`    ${e}`))
-      }
-      break
-    }
-    case "/diff": {
-      const result = gitDiff({}, workspaceRoot)
-      console.log(result)
-      break
-    }
-    case "/clear": {
-      const agentsMd = await loadAgentsMd({ projectRoot: workspaceRoot })
-      messages = [
-        { role: "system", content: formatSystemPromptWithAgentsMd(BASE_SYSTEM_PROMPT, agentsMd) },
-      ]
-      clearPendingBatch()
-      console.log("  Conversation cleared.")
-      break
-    }
-    case "/exit":
-      persistSession()
-      console.log("  Session saved. Bye!")
-      process.exit(0)
-    default:
-      console.log(`  Unknown command: ${cmd}. Type /help for available commands.`)
-  }
-  return true
-}
+    },
+  })
 
-async function main() {
-  await loadOrCreateSession()
+  const menu = new SlashMenu(slashRegistry.list())
 
   console.log("\nvector — provider-agnostic coding agent")
   console.log(`  Model: ${currentModel ?? registry.getDefault()}`)
   console.log(`  Mode: ${getApprovalMode()}`)
   console.log(`  Workspace: ${workspaceRoot}`)
-  console.log("  Type /status for details, /help for commands, /exit to quit.\n")
+  console.log("  Type / for commands, /status for details, /exit to quit.\n")
 
   const rl = readline.createInterface({
     input: process.stdin,
     output: process.stdout,
     terminal: true,
     prompt: "You: ",
-    completer: createCompleter({
-      listProviders: () => registry.listProviders(),
-      listModels: (provider) => registry.listModels(provider),
-    }),
   })
 
   const processInput = async (input: string) => {
@@ -351,7 +266,8 @@ async function main() {
       return
     }
 
-    if (await handleCommand(input)) {
+    if (input.startsWith("/")) {
+      await dispatchSlashCommand(input, slashRegistry)
       rl.prompt()
       return
     }
@@ -484,9 +400,84 @@ async function main() {
     rl.prompt()
   }
 
-  rl.on("line", (input) => {
-    processInput(input)
-  })
+  // Handle raw keystrokes for slash menu
+  if (process.stdin.isTTY) {
+    process.stdin.setRawMode(true)
+    process.stdin.resume()
+    process.stdin.setEncoding("utf8")
+
+    let lineBuffer = ""
+
+    process.stdin.on("data", async (key: string) => {
+      // Ctrl+C
+      if (key === "\x03") {
+        console.log("\n  (Ctrl+C) Use /exit to quit.")
+        rl.prompt()
+        return
+      }
+
+      // If in slashMenu mode, handle keys ourselves
+      if (menu.mode === "slashMenu") {
+        const selected = menu.handleKey(key)
+
+        if (selected !== null) {
+          // Command was selected — dispatch it
+          lineBuffer = ""
+          await dispatchSlashCommand(`/${selected}`, slashRegistry)
+          rl.prompt()
+          return
+        }
+
+        if (menu.mode === "editing") {
+          // Escaped out of menu
+          lineBuffer = ""
+          rl.prompt()
+          return
+        }
+
+        // Render popup
+        const popup = menu.render()
+        if (popup) {
+          process.stdout.write(popup)
+        }
+        return
+      }
+
+      // In editing mode, track the line buffer for "/" trigger detection
+      if (key === "\r") {
+        // Enter — submit the line
+        const input = lineBuffer
+        lineBuffer = ""
+        await processInput(input)
+        return
+      }
+
+      if (key === "\x7F" || key === "\b") {
+        // Backspace
+        lineBuffer = lineBuffer.slice(0, -1)
+        return
+      }
+
+      if (key.length === 1) {
+        lineBuffer += key
+
+        // Check if we just typed "/" at the start of a new line
+        if (lineBuffer === "/") {
+          menu.handleKey("/")
+          const popup = menu.render()
+          if (popup) {
+            process.stdout.write(popup)
+          }
+          return
+        }
+      }
+    })
+  } else {
+    // Fallback for non-TTY (piped input)
+    rl.on("line", async (input) => {
+      await processInput(input)
+    })
+  }
 
   rl.on("SIGINT", () => {
     console.log("\n  (Ctrl+C) Use /exit to quit.")
