@@ -74,7 +74,8 @@ export function formatStatus(
 
   if (opts.contextWindow && opts.contextWindow > 0) {
     const contextPct = Math.round((statusState.latestPromptTokens / opts.contextWindow) * 100)
-    lines.push(`  Context: ${contextPct}% of ${opts.contextWindow.toLocaleString()} window`)
+    const pctDisplay = contextPct === 0 && statusState.latestPromptTokens > 0 ? "<1" : `${contextPct}`
+    lines.push(`  Context: ${pctDisplay}% of ${opts.contextWindow.toLocaleString()} window`)
   } else {
     lines.push(`  Context: Unknown context window`)
   }

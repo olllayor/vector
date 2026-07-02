@@ -138,4 +138,26 @@ describe("status", () => {
 
     expect(output).toContain("Unknown context window")
   })
+
+  it("formatStatus shows <1% when tokens exist but percentage rounds to zero", () => {
+    const state: StatusState = {
+      totalPromptTokens: 1854,
+      totalCompletionTokens: 610,
+      totalTokens: 2464,
+      latestPromptTokens: 1854,
+      turnCount: 1,
+    }
+
+    const output = formatStatus(state, {
+      model: "test/model",
+      approvalMode: "ask",
+      reasoningEnabled: true,
+      contextWindow: 1000000,
+      messageCount: 2,
+      toolCallCount: 0,
+    })
+
+    expect(output).toContain("<1%")
+    expect(output).not.toContain("0%")
+  })
 })
