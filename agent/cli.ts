@@ -10,6 +10,7 @@ import { saveSession, loadSession, clearSession, addMessage, getSessionSize, typ
 import { compactHistory } from "./compact.js"
 import { stripThinkingTags } from "./utils/strip-thinking.js"
 import { loadAgentsMd, formatSystemPromptWithAgentsMd } from "./agents-md.js"
+import { initAgentsMd } from "./init-agents-md.js"
 import { undoLastBatch, hasPendingUndo, getPendingBatchSize, clearPendingBatch } from "./undo.js"
 import { readFile } from "./tools/read-file.js"
 import { listFiles } from "./tools/list-files.js"
@@ -19,11 +20,14 @@ import { writeFile } from "./tools/write-file.js"
 import { gitDiff } from "./tools/git-diff.js"
 import { runCommand } from "./tools/run-command.js"
 import { ReadFileArgsSchema, ListFilesArgsSchema, SearchCodeArgsSchema, StrReplaceArgsSchema, WriteFileArgsSchema, GitDiffArgsSchema, RunCommandArgsSchema } from "./tool-schemas.js"
+import { recordUsage, getStatus, getStateForPersist, loadStateFromPersist, formatStatus } from "./status.js"
+import type { ChatCompletion } from "openai/resources/chat/completions"
 
 const workspaceRoot = resolveWorkspaceRoot()
 let currentModel: string | undefined
 let messages: SessionMessage[] = []
 let reasoningEnabled = true
+let toolCallCount = 0
 const auditLogPath = resolve(workspaceRoot, ".vector", "audit.log")
 
 const BASE_SYSTEM_PROMPT = "You are a coding agent. Use tools to help the user. Always read files before editing them. Prefer str_replace over write_file for edits."
@@ -34,6 +38,9 @@ async function loadOrCreateSession(): Promise<void> {
     currentModel = `${session.provider}/${session.model}`
     messages = session.messages
     setApprovalMode(session.approvalMode)
+    if (session.tokenUsage) {
+      loadStateFromPersist(session.tokenUsage)
+    }
     console.log(`  Resumed session from ${session.updatedAt}`)
     console.log(`  Model: ${currentModel} | Mode: ${session.approvalMode} | Messages: ${messages.length}`)
   } else {
@@ -56,13 +63,16 @@ function persistSession(): void {
     model: resolved.modelId,
     approvalMode: getApprovalMode(),
     messages,
+    tokenUsage: getStateForPersist(),
   })
 }
 
 function printHelp() {
   console.log(`
 Commands:
+  /status               Show model, approvals, and token usage
   /help                 Show this help
+  /init                 Generate AGENTS.md for this project
   /model                Show current model
   /model <provider/id>  Switch model
   /providers            List all providers and models
@@ -203,6 +213,28 @@ async function handleCommand(input: string): Promise<boolean> {
     case "/help":
       printHelp()
       break
+    case "/status": {
+      const ref = currentModel ?? registry.getDefault()
+      const resolved = registry.resolve(ref)
+      const statusOutput = formatStatus(getStatus(), {
+        model: `${resolved.provider}/${resolved.modelId}`,
+        approvalMode: getApprovalMode(),
+        reasoningEnabled,
+        contextWindow: resolved.config.contextWindow,
+        messageCount: messages.length,
+        toolCallCount,
+      })
+      console.log(statusOutput)
+      break
+    }
+    case "/init": {
+      const { content, path } = await initAgentsMd(workspaceRoot)
+      const { writeFileSync } = await import("fs")
+      writeFileSync(path, content, "utf-8")
+      console.log(`  Generated AGENTS.md at ${path}`)
+      console.log("  Sections: Project Type, Setup, Commands, Architecture, Key Conventions")
+      break
+    }
     case "/model":
       if (args.length === 0) {
         console.log(`  Current model: ${currentModel ?? registry.getDefault()}`)
@@ -280,7 +312,7 @@ async function main() {
   console.log(`  Model: ${currentModel ?? registry.getDefault()}`)
   console.log(`  Mode: ${getApprovalMode()}`)
   console.log(`  Workspace: ${workspaceRoot}`)
-  console.log("  Type /help for commands, /exit to quit.\n")
+  console.log("  Type /status for details, /help for commands, /exit to quit.\n")
 
   const rl = readline.createInterface({
     input: process.stdin,
@@ -350,6 +382,7 @@ async function main() {
             const displayContent = reasoningEnabled ? assistantContent : stripThinkingTags(assistantContent)
             process.stdout.write(`\nAssistant: ${displayContent}\n\n`)
           }
+          recordUsage((response as ChatCompletion).usage)
         }
 
         if (assistantContent) {
@@ -375,6 +408,7 @@ async function main() {
             console.log(`  [tool: ${tc.name}]`)
             const output = await dispatchTool(tc.name, args)
             console.log(output)
+            toolCallCount++
             messages = addMessage(messages, { role: "tool", content: output, tool_call_id: tc.id })
           }
 
@@ -402,6 +436,7 @@ async function main() {
             process.stdout.write(`\nAssistant: ${displayContent}\n\n`)
             messages = addMessage(messages, { role: "assistant", content: followUpContent })
           }
+          recordUsage((followUp as ChatCompletion).usage)
         }
       } catch (e) {
         const msg = (e as Error).message
