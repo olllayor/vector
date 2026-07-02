@@ -134,17 +134,17 @@ describe("loadAgentsMd", () => {
 
 describe("formatSystemPromptWithAgentsMd", () => {
   it("returns base prompt when no AGENTS.md", () => {
-    const base = "You are nvcoder"
+    const base = "You are vector"
     expect(formatSystemPromptWithAgentsMd(base, "")).toBe(base)
   })
 
   it("wraps AGENTS.md in project_instructions tags", () => {
-    const base = "You are nvcoder"
+    const base = "You are vector"
     const content = "Use pnpm"
     const result = formatSystemPromptWithAgentsMd(base, content)
     expect(result).toContain("<project_instructions>")
     expect(result).toContain("Use pnpm")
     expect(result).toContain("</project_instructions>")
-    expect(result).toContain("You are nvcoder")
+    expect(result).toContain("You are vector")
   })
 })

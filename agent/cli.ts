@@ -24,7 +24,7 @@ const workspaceRoot = resolveWorkspaceRoot()
 let currentModel: string | undefined
 let messages: SessionMessage[] = []
 let reasoningEnabled = true
-const auditLogPath = resolve(workspaceRoot, ".nvcoder", "audit.log")
+const auditLogPath = resolve(workspaceRoot, ".vector", "audit.log")
 
 const BASE_SYSTEM_PROMPT = "You are a coding agent. Use tools to help the user. Always read files before editing them. Prefer str_replace over write_file for edits."
 
@@ -72,7 +72,7 @@ Commands:
   /undo                 Undo last file edit batch
   /diff                 Show git diff
   /clear                Clear conversation history
-  /exit                 Exit nvcoder
+  /exit                 Exit vector
 `)
 }
 
@@ -276,7 +276,7 @@ async function handleCommand(input: string): Promise<boolean> {
 async function main() {
   await loadOrCreateSession()
 
-  console.log("\nnvcoder — provider-agnostic coding agent")
+  console.log("\nvector — provider-agnostic coding agent")
   console.log(`  Model: ${currentModel ?? registry.getDefault()}`)
   console.log(`  Mode: ${getApprovalMode()}`)
   console.log(`  Workspace: ${workspaceRoot}`)

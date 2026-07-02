@@ -2,7 +2,7 @@
 
 ## 1) Product intent
 
-Build a **local-first coding CLI** (working name: `nvcoder`) that feels like a lightweight Codex/Claude-style assistant and can switch providers/models without code changes.
+Build a **local-first coding CLI** (working name: `vector`) that feels like a lightweight Codex/Claude-style assistant and can switch providers/models without code changes.
 
 Core job:
 

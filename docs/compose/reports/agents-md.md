@@ -12,9 +12,9 @@ commits: none (uncommitted)
 
 ## What Was Built
 
-nvcoder now reads `AGENTS.md` files at session start and injects their content into the system prompt. This lets developers encode project conventions (test commands, style rules, "don't touch" folders) in markdown files that the agent automatically discovers and respects.
+vector now reads `AGENTS.md` files at session start and injects their content into the system prompt. This lets developers encode project conventions (test commands, style rules, "don't touch" folders) in markdown files that the agent automatically discovers and respects.
 
-The system follows Codex's two-tier model: global instructions (`~/.nvcoder/AGENTS.md`) apply everywhere, while project-level files (walking from Git root to cwd) add or override with directory-specific rules. Override files (`AGENTS.override.md`) always win at each level.
+The system follows Codex's two-tier model: global instructions (`~/.vector/AGENTS.md`) apply everywhere, while project-level files (walking from Git root to cwd) add or override with directory-specific rules. Override files (`AGENTS.override.md`) always win at each level.
 
 ## Architecture
 
@@ -28,7 +28,7 @@ The system follows Codex's two-tier model: global instructions (`~/.nvcoder/AGEN
 
 ### Discovery Rules
 
-1. **Global scope** — `~/.nvcoder/AGENTS.override.md` (preferred) or `~/.nvcoder/AGENTS.md`
+1. **Global scope** — `~/.vector/AGENTS.override.md` (preferred) or `~/.vector/AGENTS.md`
 2. **Project scope** — Walk from Git root → cwd. Each directory: `AGENTS.override.md` → `AGENTS.md`
 3. **Concatenation** — Root-down order. Later files appear later in the system prompt (natural override).
 4. **Truncation** — Capped at 32 KiB. Excess content is dropped with a warning comment.
@@ -57,7 +57,7 @@ interface AgentsMdOptions {
   projectRoot?: string  // defaults to Git root
   cwd?: string          // defaults to process.cwd()
   maxBytes?: number     // defaults to 32768
-  globalDir?: string    // defaults to ~/.nvcoder
+  globalDir?: string    // defaults to ~/.vector
 }
 ```
 
@@ -82,7 +82,7 @@ interface AgentsMdOptions {
 - Prefer `str_replace` over `write_file` for edits
 ```
 
-2. Optionally create `~/.nvcoder/AGENTS.md` for global preferences:
+2. Optionally create `~/.vector/AGENTS.md` for global preferences:
 
 ```markdown
 # Global Preferences
@@ -91,10 +91,10 @@ interface AgentsMdOptions {
 - Ask before adding new production dependencies
 ```
 
-3. Start nvcoder — instructions are loaded automatically:
+3. Start vector — instructions are loaded automatically:
 
 ```
-nvcoder
+vector
 # Output: "Loaded project instructions from AGENTS.md"
 ```
 

@@ -28,7 +28,7 @@ function walkDir(dir: string, depth: number, maxDepth: number, gitFiles: Set<str
 
   const results: string[] = []
   for (const entry of entries) {
-    if (entry === "node_modules" || entry === ".git" || entry === ".nvcoder") continue
+    if (entry === "node_modules" || entry === ".git" || entry === ".vector") continue
 
     const fullPath = join(dir, entry)
     const relPath = relative(process.cwd(), fullPath)

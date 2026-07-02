@@ -81,7 +81,7 @@ describe("Undo system", () => {
     recordBackup(workspace, filePath, false)
     undoLastBatch(workspace)
 
-    const backupDir = join(workspace, ".nvcoder", "backups")
+    const backupDir = join(workspace, ".vector", "backups")
     const { readdirSync } = require("fs")
     const backups = readdirSync(backupDir).filter((f: string) => f.includes("file.ts"))
     expect(backups).toHaveLength(0)

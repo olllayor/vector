@@ -652,7 +652,7 @@ import { registry } from "./model.config.js"
 const rl = readline.createInterface({
   input: process.stdin,
   output: process.stdout,
-  prompt: "nvcoder> ",
+  prompt: "vector> ",
 })
 
 let currentModel: string | undefined
@@ -666,7 +666,7 @@ Commands:
   /providers            List all providers and models
   /diff                 Show git diff (coming soon)
   /clear                Clear conversation (coming soon)
-  /exit                 Exit nvcoder
+  /exit                 Exit vector
 `)
 }
 
@@ -722,7 +722,7 @@ function handleCommand(input: string): boolean {
 }
 
 async function main() {
-  console.log("nvcoder — provider-agnostic coding agent (Phase 0)")
+  console.log("vector — provider-agnostic coding agent (Phase 0)")
   console.log(`Default model: ${registry.getDefault()}`)
   console.log("Type /help for commands, /exit to quit.\n")
 
@@ -793,7 +793,7 @@ git commit -m "feat: add minimal REPL CLI with /help, /model, /providers, /exit"
 
 ---
 
-### Task 8: Add `.nvcoder/` to `.gitignore`
+### Task 8: Add `.vector/` to `.gitignore`
 
 **Covers:** §8 Safety model — File edit policy
 
@@ -802,13 +802,13 @@ git commit -m "feat: add minimal REPL CLI with /help, /model, /providers, /exit"
 
 - [ ] **Step 1: Append to .gitignore**
 
-Add `.nvcoder/` to the existing `.gitignore`.
+Add `.vector/` to the existing `.gitignore`.
 
 - [ ] **Step 2: Commit**
 
 ```bash
 git add .gitignore
-git commit -m "chore: add .nvcoder/ to gitignore"
+git commit -m "chore: add .vector/ to gitignore"
 ```
 
 ---

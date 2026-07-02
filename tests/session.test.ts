@@ -8,7 +8,7 @@ const workspace = join(tmpdir(), `test-sess-${Date.now()}`)
 
 beforeEach(() => {
   mkdirSync(workspace, { recursive: true })
-  mkdirSync(join(workspace, ".nvcoder"), { recursive: true })
+  mkdirSync(join(workspace, ".vector"), { recursive: true })
 })
 
 afterEach(() => {
@@ -141,7 +141,7 @@ describe("Session edge cases", () => {
 
   it("returns null for corrupted session file", () => {
     const { writeFileSync: wf } = require("fs")
-    const path = require("path").resolve(workspace, ".nvcoder", "session.json")
+    const path = require("path").resolve(workspace, ".vector", "session.json")
     wf(path, "not json{{{")
     expect(loadSession(workspace)).toBeNull()
   })

@@ -1,4 +1,4 @@
-# nvcoder
+# vector
 
 A local-first, provider-agnostic coding agent. Inspect, edit, and run code inside your repository with explicit user control.
 
@@ -103,11 +103,11 @@ Then set the env var and switch: `/model my-provider/my-model-id`.
 - **Output truncation**: Large outputs are capped at 10k chars / 50 head + 150 tail lines.
 - **Stale-file detection**: SHA-256 hashes track file state; edits to changed files require approval.
 - **Command policy**: Shell commands require approval (mode-dependent), have timeouts, closed stdin, and audit logging.
-- **Audit log**: All approved/denied commands are logged to `.nvcoder/audit.log`.
+- **Audit log**: All approved/denied commands are logged to `.vector/audit.log`.
 
 ## Privacy
 
-- `.nvcoder/` is gitignored and stays local.
+- `.vector/` is gitignored and stays local.
 - Session data (conversations, backups) never leaves your machine.
 - Secrets are scrubbed from tool outputs before being sent to any cloud provider.
 - No telemetry, no analytics, no external calls beyond the configured LLM provider.

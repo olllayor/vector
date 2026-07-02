@@ -7,7 +7,7 @@ import { realpathSync } from "fs"
 const MAX_BYTES_DEFAULT = 32768
 const OVERRIDE_SUFFIX = ".override.md"
 const PRIMARY_SUFFIX = ".md"
-const GLOBAL_DIR = ".nvcoder"
+const GLOBAL_DIR = ".vector"
 const FILENAME = "AGENTS"
 const TRUNCATION_WARNING = "\n\n<!-- WARNING: AGENTS.md context truncated due to size limits -->"
 

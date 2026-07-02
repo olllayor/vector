@@ -10,7 +10,7 @@ interface UndoEntry {
 let pendingBatch: UndoEntry[] = []
 
 export function getBackupDir(workspaceRoot: string): string {
-  return resolve(workspaceRoot, ".nvcoder", "backups")
+  return resolve(workspaceRoot, ".vector", "backups")
 }
 
 export function recordBackup(

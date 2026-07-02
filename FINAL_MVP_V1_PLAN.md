@@ -2,7 +2,7 @@
 
 ## 0) Final scope decision
 
-Build `nvcoder`: a **local-first, provider-agnostic coding CLI** that can inspect, edit, and run code inside the current repository with explicit user control.
+Build `vector`: a **local-first, provider-agnostic coding CLI** that can inspect, edit, and run code inside the current repository with explicit user control.
 
 The original plan is strong. After reviewing the suggestion docs in `conclusion/`, the final v1 plan keeps the same product boundary but upgrades several items from “nice-to-have” to **MVP-critical** because they directly affect data safety, tool reliability, and real-world usability.
 
@@ -204,7 +204,7 @@ Rules:
 
 `/undo` is recommended because developer trust is core to a coding agent. Keep it minimal:
 
-- before the first file modification to a path, copy the original file to `.nvcoder/backups/`;
+- before the first file modification to a path, copy the original file to `.vector/backups/`;
 - `/undo` restores the last modified file batch;
 - no complex history UI in v1.
 
@@ -212,7 +212,7 @@ If `/undo` risks delaying launch, the minimum acceptable replacement is: **diff 
 
 ### Approval modes
 
-Approval mode is a runtime/session setting stored in `.nvcoder/session.json`. The CLI should show the active mode at startup and when it changes.
+Approval mode is a runtime/session setting stored in `.vector/session.json`. The CLI should show the active mode at startup and when it changes.
 
 #### 1. `ask` — ask for approval
 
@@ -388,7 +388,7 @@ Rules:
 8. Strip ANSI before sending output to the model.
 9. Scrub common secret patterns before sending output to the model.
 10. Truncate output before sending output to the model.
-11. Log approved/denied/auto-approved commands to `.nvcoder/audit.log`.
+11. Log approved/denied/auto-approved commands to `.vector/audit.log`.
 12. Warn or block obvious secret-exposure commands such as:
    - `cat .env`
    - `env`
@@ -454,7 +454,7 @@ Do not rely on a denylist alone.
 1. `str_replace` is default.
 2. Existing-file `write_file` follows the selected approval mode, but suspicious full replacement always requires explicit approval outside `full` mode.
 3. Large/suspicious replacements require stronger warning.
-4. `.nvcoder/` must be gitignored.
+4. `.vector/` must be gitignored.
 5. Binary files are not editable through text tools in v1.
 6. `/undo` semantics must be documented clearly: v1 undo restores the previous approved edit batch, including deleting newly-created files if they were created in that batch.
 
@@ -535,7 +535,7 @@ Rules:
 1. Store provider and model separately.
 2. Do not persist huge raw tool outputs.
 3. Persist text messages and compact tool summaries.
-4. Keep `.nvcoder/` out of git.
+4. Keep `.vector/` out of git.
 5. If loaded provider/model is unavailable:
    - show the problem;
    - list valid configured models;
@@ -633,7 +633,7 @@ Rules:
 5. Implement minimal `agent/cli.ts` REPL.
 6. Add approval-mode state with default `ask`.
 7. Add run script in `package.json`.
-8. Add `.nvcoder/` to `.gitignore`.
+8. Add `.vector/` to `.gitignore`.
 9. Add a quick provider/model compatibility spike script or test for configured defaults.
 10. Use the compatibility spike to verify/populate capability flags such as tool support, parallel tool calls, streaming behavior, and reasoning-tag behavior.
 
@@ -682,7 +682,7 @@ Rules:
 2. Enforce command timeout.
 3. Close stdin for child processes.
 4. Strip ANSI and truncate stdout/stderr.
-5. Add command audit log at `.nvcoder/audit.log`.
+5. Add command audit log at `.vector/audit.log`.
 6. Add destructive-command warning/deny rules.
 7. Add secret-exposure warning/deny rules.
 8. Implement Ctrl+C handling for model streams, child processes, and rate-limit backoff waits.
@@ -702,7 +702,7 @@ Rules:
 
 ### Deliverables
 
-1. Persist session JSON under `.nvcoder/`.
+1. Persist session JSON under `.vector/`.
 2. Store provider/model separately.
 3. Save compact tool summaries instead of huge raw outputs.
 4. Implement `/model` and `/providers`.
@@ -747,7 +747,7 @@ Rules:
     - safety model;
     - adding a provider;
     - v1 does not commit/push code;
-    - `.nvcoder/` privacy note;
+    - `.vector/` privacy note;
     - macOS/Linux-only v1 shell support;
     - `/undo` semantics.
 
@@ -855,7 +855,7 @@ Use `vitest` only.
 7. Tool outputs are bounded and secret-scrubbed before model/session storage.
 8. Conversation history is compacted before context-window failure.
 9. Symlink escape, binary files, stale file edits, and malformed tool arguments are covered.
-10. `.nvcoder/` is gitignored.
+10. `.vector/` is gitignored.
 11. Sessions recover gracefully from missing/unavailable models.
 12. `/model`, `/providers`, `/approval`, `/diff`, `/clear`, `/exit`, and `/help` work.
 13. Compatibility tests pass for NVIDIA plus one secondary provider.

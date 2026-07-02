@@ -23,7 +23,7 @@ const MAX_TOOL_OUTPUT_CHARS = 500
 const MAX_SESSION_CHARS = 100000
 
 function getSessionDir(workspaceRoot: string): string {
-  return resolve(workspaceRoot, ".nvcoder")
+  return resolve(workspaceRoot, ".vector")
 }
 
 function getSessionPath(workspaceRoot: string): string {
